@@ -1,0 +1,8 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Main App Theme -->
+    <style name="Theme.Factory_Tracking"
+        parent="Theme.AppCompat.DayNight.NoActionBar">
+    </style>
+
+</resources>
