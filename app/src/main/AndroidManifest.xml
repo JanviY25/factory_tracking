@@ -17,19 +17,17 @@
         android:theme="@style/Theme.Factory_Tracking"
         tools:targetApi="31">
 
-        <!-- LoginActivity = Launcher -->
+        <!-- LoginActivity = Launcher (Supervisor) -->
         <activity
             android:name=".LoginActivity"
             android:exported="true">
-
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-
         </activity>
 
-        <!-- DashboardActivity -->
+        <!-- Supervisor Dashboard -->
         <activity
             android:name=".DashboardActivity"
             android:exported="false"/>
@@ -38,6 +36,16 @@
         <activity
             android:name=".MainActivity"
             android:exported="false"/>
+
+        <!-- Operator Login -->
+        <activity
+            android:name=".OperatorLoginActivity"
+            android:exported="true" />
+
+        <!-- Operator Dashboard -->
+        <activity
+            android:name=".OperatorDashboardActivity"
+            android:exported="false" />
 
     </application>
 
