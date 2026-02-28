@@ -1,180 +1,337 @@
 package com.example.factory_tracking;
 
-import android.graphics.Color;
+import android.content.Intent;
 import android.os.Bundle;
-import android.widget.LinearLayout;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.Editable;
+import android.text.TextUtils;
+import android.text.TextWatcher;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.os.Handler;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
+import com.example.factory_tracking.api.ApiModels;
+import com.example.factory_tracking.api.RetrofitClient;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 
-import java.util.HashMap;
-import java.util.Map;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class DashboardActivity extends AppCompatActivity {
 
-    TextView tvWelcome, tvLine;
-    LinearLayout stationsContainer;
+    private static final int POLLING_INTERVAL_MS = 3000;
+    private static final int EXPIRY_CHECK_INTERVAL_MS = 10000;
 
-    // backend API
-    String STATIONS_URL = "http://192.168.1.4:3000/stations";
-
-    String supervisorName;
-    String line;
-
-    // 🔥 POLLING VARIABLES
-    private Handler handler = new Handler();
+    private TextView tvWelcome, tvShiftInfo, tvScanStatus, tvActiveStationsCount, tvOperatorsCount;
+    private RecyclerView recyclerStations;
+    private StationAdapter adapter;
+    private Spinner spLineSelection;
+    private EditText etSearch;
+    private SessionManager session;
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable pollingRunnable;
-    private static final int POLLING_INTERVAL = 2000; // 5 sec
+    private Runnable expiryCheckRunnable;
+    
+    private String currentSelectedLine;
+    private List<String> supervisorLines = new ArrayList<>();
+    private List<ApiModels.StationItem> fullStationList = new ArrayList<>();
+
+    private StringBuilder scanBuffer = new StringBuilder();
+    private String pendingStationId = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dashboard);
 
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        session = new SessionManager(this);
         tvWelcome = findViewById(R.id.tvWelcome);
-        tvLine = findViewById(R.id.tvLine);
-        stationsContainer = findViewById(R.id.stationsContainer);
+        tvShiftInfo = findViewById(R.id.tvShiftInfo);
+        tvScanStatus = findViewById(R.id.tvScanStatus);
+        tvActiveStationsCount = findViewById(R.id.tvActiveStationsCount);
+        tvOperatorsCount = findViewById(R.id.tvOperatorsCount);
+        recyclerStations = findViewById(R.id.recyclerStations);
+        spLineSelection = findViewById(R.id.spLineSelection);
+        etSearch = findViewById(R.id.etSearch);
 
-        // data from LoginActivity
-        supervisorName = getIntent().getStringExtra("name");
-        line = getIntent().getStringExtra("line");
+        adapter = new StationAdapter();
+        recyclerStations.setLayoutManager(new LinearLayoutManager(this));
+        recyclerStations.setAdapter(adapter);
 
-        tvWelcome.setText("Welcome " + supervisorName);
-        tvLine.setText("Line: " + line);
+        tvWelcome.setText("Welcome " + session.getName());
+        tvShiftInfo.setText("Shift: " + session.getShift());
+        tvScanStatus.setText("Ready to scan (Station then Operator)...");
 
-        // first load
-        loadStations();
+        String linesStr = session.getLine();
+        if (!TextUtils.isEmpty(linesStr)) {
+            supervisorLines = Arrays.asList(linesStr.split(","));
+        }
 
-        // start auto polling
-        startPolling();
-    }
+        setupLineSpinner();
+        setupSearch();
 
-    // 🔥 START POLLING
-    private void startPolling() {
+        findViewById(R.id.btnLogout).setOnClickListener(v -> {
+            session.logout(); 
+            startActivity(new Intent(this, LoginActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
+            finish();
+        });
+
+        findViewById(R.id.btnEndShift).setOnClickListener(v -> endShift());
 
         pollingRunnable = new Runnable() {
             @Override
             public void run() {
-
-                loadStations(); // refresh data
-
-                handler.postDelayed(this, POLLING_INTERVAL);
+                if (currentSelectedLine != null) {
+                    loadStations(currentSelectedLine);
+                }
+                handler.postDelayed(this, POLLING_INTERVAL_MS);
             }
         };
+        handler.postDelayed(pollingRunnable, POLLING_INTERVAL_MS);
 
-        handler.postDelayed(pollingRunnable, POLLING_INTERVAL);
+        expiryCheckRunnable = new Runnable() {
+            @Override
+            public void run() {
+                checkShiftExpiry();
+                handler.postDelayed(this, EXPIRY_CHECK_INTERVAL_MS);
+            }
+        };
+        handler.postDelayed(expiryCheckRunnable, EXPIRY_CHECK_INTERVAL_MS);
     }
 
-    private void loadStations() {
+    private void setupSearch() {
+        etSearch.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                filterStations(s.toString());
+            }
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+    }
 
-        StringRequest request = new StringRequest(
-                Request.Method.POST,
-                STATIONS_URL,
+    private void filterStations(String query) {
+        if (TextUtils.isEmpty(query)) {
+            adapter.setStations(fullStationList);
+            return;
+        }
+        List<ApiModels.StationItem> filtered = new ArrayList<>();
+        for (ApiModels.StationItem item : fullStationList) {
+            boolean matchesStation = item.stationId != null && item.stationId.toLowerCase().contains(query.toLowerCase());
+            boolean matchesOperator = item.operatorId != null && item.operatorId.toLowerCase().contains(query.toLowerCase());
+            if (matchesStation || matchesOperator) {
+                filtered.add(item);
+            }
+        }
+        adapter.setStations(filtered);
+    }
 
-                response -> {
-                    try {
+    private void checkShiftExpiry() {
+        String endTimeStr = session.getEndTime();
+        if (TextUtils.isEmpty(endTimeStr)) return;
 
-                        JSONObject obj = new JSONObject(response);
-                        String status = obj.getString("status");
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
+        try {
+            Date expiryDate = sdf.parse(endTimeStr);
+            if (expiryDate != null && new Date().after(expiryDate)) {
+                Toast.makeText(this, "Shift time expired! Ending shift...", Toast.LENGTH_LONG).show();
+                endShift();
+            }
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+    }
 
-                        if(status.equals("success")) {
+    private void setupLineSpinner() {
+        if (supervisorLines.isEmpty()) return;
 
-                            // 🔥 CLEAR OLD VIEWS BEFORE RELOADING
-                            stationsContainer.removeAllViews();
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, supervisorLines);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spLineSelection.setAdapter(adapter);
 
-                            JSONArray stations = obj.getJSONArray("stations");
+        currentSelectedLine = supervisorLines.get(0);
+        spLineSelection.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                currentSelectedLine = supervisorLines.get(position);
+                loadStations(currentSelectedLine);
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+    }
 
-                            for(int i=0; i<stations.length(); i++) {
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            int keyCode = event.getKeyCode();
+            if (keyCode == KeyEvent.KEYCODE_ENTER) {
+                String scannedData = scanBuffer.toString().trim();
+                if (!scannedData.isEmpty()) {
+                    processScan(scannedData);
+                }
+                scanBuffer.setLength(0); 
+                return true;
+            } else {
+                char unicodeChar = (char) event.getUnicodeChar();
+                if (Character.isLetterOrDigit(unicodeChar) || unicodeChar == '-' || unicodeChar == ':' || unicodeChar == ' ') {
+                    scanBuffer.append(unicodeChar);
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
 
-                                JSONObject station = stations.getJSONObject(i);
+    private void processScan(String raw) {
+        String stationId = ScanHelper.extractStationId(raw);
+        String operatorId = ScanHelper.extractOperatorId(raw);
 
-                                String stationId = station.getString("station_id");
-                                String operatorId = station.optString("operator_id", "N/A");
-                                String statusColor = station.optString("status","none");
+        if (stationId != null) {
+            pendingStationId = stationId;
+            tvScanStatus.setText("STATION: " + stationId + " | Scan Operator QR...");
+            tvScanStatus.setTextColor(android.graphics.Color.BLUE);
+            return;
+        }
 
-                                addStationRow(stationId, operatorId, statusColor);
-                            }
+        if (operatorId != null) {
+            if (pendingStationId != null) {
+                assignOperator(pendingStationId, operatorId);
+                pendingStationId = null; 
+            } else {
+                tvScanStatus.setText("Scan STATION QR first!");
+                tvScanStatus.setTextColor(android.graphics.Color.RED);
+            }
+            return;
+        }
 
-                        } else {
+        if (raw.length() > 3) {
+            if (pendingStationId == null) {
+                pendingStationId = raw;
+                tvScanStatus.setText("STATION: " + raw + " | Scan Operator QR...");
+                tvScanStatus.setTextColor(android.graphics.Color.BLUE);
+            } else {
+                assignOperator(pendingStationId, raw);
+                pendingStationId = null;
+            }
+        }
+    }
 
-                            Toast.makeText(this,"No stations found",Toast.LENGTH_SHORT).show();
-                        }
+    private void assignOperator(String sId, String oId) {
+        ApiModels.AssignRequest req = new ApiModels.AssignRequest();
+        req.stationId = sId;
+        req.operatorId = oId;
+        req.supervisorId = session.getSupervisorId();
+        req.shift = session.getShift();
+        req.sessionId = session.getSessionId();
 
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                },
-
-                error -> Toast.makeText(this,
-                        "Error: "+error.toString(),
-                        Toast.LENGTH_LONG).show()
-        ) {
+        tvScanStatus.setText("Assigning " + oId + " to " + sId + "...");
+        tvScanStatus.setTextColor(android.graphics.Color.BLACK);
+        
+        RetrofitClient.getApi().assign(req).enqueue(new Callback<ApiModels.AssignResponse>() {
+            @Override
+            public void onResponse(Call<ApiModels.AssignResponse> call, Response<ApiModels.AssignResponse> response) {
+                if (response.isSuccessful() && response.body() != null && "success".equals(response.body().status)) {
+                    tvScanStatus.setText("SUCCESS: " + oId + " -> " + sId);
+                    tvScanStatus.setTextColor(android.graphics.Color.parseColor("#2E7D32")); 
+                    loadStations(currentSelectedLine); 
+                } else {
+                    String msg = response.body() != null ? response.body().message : "Assignment failed";
+                    tvScanStatus.setText("FAILED: " + msg);
+                    tvScanStatus.setTextColor(android.graphics.Color.RED);
+                }
+            }
 
             @Override
-            protected Map<String, String> getParams() {
-
-                Map<String,String> params = new HashMap<>();
-                params.put("line", line);
-                return params;
+            public void onFailure(Call<ApiModels.AssignResponse> call, Throwable t) {
+                tvScanStatus.setText("Server Error. Check Wi-Fi.");
+                tvScanStatus.setTextColor(android.graphics.Color.RED);
             }
-        };
-
-        RequestQueue queue = Volley.newRequestQueue(this);
-        queue.add(request);
+        });
     }
 
-    private void addStationRow(String stationId, String operatorId, String status) {
-
-        TextView tv = new TextView(this);
-
-        tv.setText("Station: " + stationId +
-                "\nOperator: " + operatorId);
-
-        tv.setTextSize(18);
-        tv.setPadding(30,30,30,30);
-
-        // status color
-        if(status.equalsIgnoreCase("green")) {
-            tv.setBackgroundColor(Color.parseColor("#A5D6A7"));
-        }
-        else if(status.equalsIgnoreCase("yellow")) {
-            tv.setBackgroundColor(Color.parseColor("#FFF59D"));
-        }
-        else if(status.equalsIgnoreCase("red")) {
-            tv.setBackgroundColor(Color.parseColor("#EF9A9A"));
-        }
-        else {
-            tv.setBackgroundColor(Color.LTGRAY);
-        }
-
-        LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT);
-
-        params.setMargins(0,20,0,0);
-        tv.setLayoutParams(params);
-
-        stationsContainer.addView(tv);
+    private void loadStations(String line) {
+        ApiModels.GetStationsRequest req = new ApiModels.GetStationsRequest(line);
+        RetrofitClient.getApi().getStations(req).enqueue(new Callback<ApiModels.GetStationsResponse>() {
+            @Override
+            public void onResponse(Call<ApiModels.GetStationsResponse> call, Response<ApiModels.GetStationsResponse> response) {
+                if (response.isSuccessful() && response.body() != null && "success".equals(response.body().status)) {
+                    fullStationList = response.body().stations;
+                    // Apply current search filter to the fresh data
+                    filterStations(etSearch.getText().toString());
+                    updateCounters(fullStationList);
+                }
+            }
+            @Override
+            public void onFailure(Call<ApiModels.GetStationsResponse> call, Throwable t) {}
+        });
     }
 
-    // 🔥 STOP POLLING WHEN ACTIVITY CLOSES
+    private void updateCounters(List<ApiModels.StationItem> stations) {
+        if (stations == null) return;
+        int activeCount = 0;
+        int operatorCount = 0;
+        for (ApiModels.StationItem s : stations) {
+            if (s.operatorId != null && !s.operatorId.isEmpty()) {
+                activeCount++;
+                operatorCount++;
+            }
+        }
+        tvActiveStationsCount.setText(String.valueOf(activeCount));
+        tvOperatorsCount.setText(String.valueOf(operatorCount));
+    }
+
+    private void endShift() {
+        int sessionId = session.getSessionId();
+        if (sessionId <= 0) return;
+        
+        ApiModels.EndShiftRequest req = new ApiModels.EndShiftRequest();
+        req.sessionId = sessionId;
+        req.lineId = TextUtils.join(",", supervisorLines);
+        
+        RetrofitClient.getApi().endShift(req).enqueue(new Callback<ApiModels.EndShiftResponse>() {
+            @Override
+            public void onResponse(Call<ApiModels.EndShiftResponse> call, Response<ApiModels.EndShiftResponse> response) {
+                if (response.isSuccessful() && response.body() != null && "success".equals(response.body().status)) {
+                    session.clearShiftSession(); 
+                    startActivity(new Intent(DashboardActivity.this, StartShiftActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
+                    finish();
+                }
+            }
+            @Override
+            public void onFailure(Call<ApiModels.EndShiftResponse> call, Throwable t) {}
+        });
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
-
-        if(handler != null && pollingRunnable != null) {
-            handler.removeCallbacks(pollingRunnable);
-        }
+        handler.removeCallbacks(pollingRunnable);
+        handler.removeCallbacks(expiryCheckRunnable);
     }
 }

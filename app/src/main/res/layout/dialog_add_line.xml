@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Line Name (e.g. LINE 2)"
+        android:textColor="@color/black"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etLineName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Enter name"
+        android:inputType="textCapCharacters"
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Number of Stations"
+        android:textColor="@color/black"
+        android:textSize="14sp"
+        android:layout_marginTop="16dp" />
+
+    <EditText
+        android:id="@+id/etStationCount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="e.g. 70"
+        android:inputType="number"
+        android:layout_marginTop="4dp" />
+
+</LinearLayout>

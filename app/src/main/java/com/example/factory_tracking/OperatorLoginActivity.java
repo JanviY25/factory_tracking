@@ -8,33 +8,27 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
+import com.example.factory_tracking.api.ApiModels;
+import com.example.factory_tracking.api.RetrofitClient;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.util.HashMap;
-import java.util.Map;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class OperatorLoginActivity extends AppCompatActivity {
 
     private EditText etName, etPassword;
-    private Button btnLogin;
-    private final String OPERATOR_LOGIN_URL = "http://192.168.1.4:3000/operator/login";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_operator_login);
+        RetrofitClient.init(this);
 
         etName = findViewById(R.id.etOperatorName);
         etPassword = findViewById(R.id.etOperatorPassword);
-        btnLogin = findViewById(R.id.btnOperatorLogin);
 
-        btnLogin.setOnClickListener(v -> loginOperator());
+        findViewById(R.id.btnOperatorLogin).setOnClickListener(v -> loginOperator());
     }
 
     private void loginOperator() {
@@ -46,49 +40,31 @@ public class OperatorLoginActivity extends AppCompatActivity {
             return;
         }
 
-        StringRequest request = new StringRequest(Request.Method.POST, OPERATOR_LOGIN_URL,
-                response -> {
-                    try {
-                        JSONObject json = new JSONObject(response);
-                        String status = json.getString("status");
+        ApiModels.OperatorLoginRequest req = new ApiModels.OperatorLoginRequest();
+        req.name = name;
+        req.password = password;
 
-                        if (status.equals("success")) {
-                            String operatorId = json.getString("operator_id");
-                            String operatorName = json.getString("name");
-
-                            Toast.makeText(OperatorLoginActivity.this,
-                                    "Login successful", Toast.LENGTH_SHORT).show();
-
-                            Intent intent = new Intent(OperatorLoginActivity.this,
-                                    OperatorDashboardActivity.class);
-                            intent.putExtra("operator_id", operatorId);
-                            intent.putExtra("name", operatorName);
-                            startActivity(intent);
-                            finish();
-                        } else {
-                            String message = json.optString("message", "Invalid credentials");
-                            Toast.makeText(OperatorLoginActivity.this,
-                                    message, Toast.LENGTH_SHORT).show();
-                        }
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                        Toast.makeText(OperatorLoginActivity.this,
-                                "JSON error: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                    }
-                },
-                error -> Toast.makeText(OperatorLoginActivity.this,
-                        "Server error: " + error.getMessage(), Toast.LENGTH_LONG).show()
-        ) {
+        RetrofitClient.getApi().operatorLogin(req).enqueue(new Callback<ApiModels.OperatorLoginResponse>() {
             @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<>();
-                params.put("name", name);
-                params.put("password", password);
-                return params;
+            public void onResponse(Call<ApiModels.OperatorLoginResponse> call, Response<ApiModels.OperatorLoginResponse> response) {
+                if (response.isSuccessful() && response.body() != null && "success".equals(response.body().status)) {
+                    ApiModels.OperatorLoginResponse body = response.body();
+                    Toast.makeText(OperatorLoginActivity.this, "Login successful", Toast.LENGTH_SHORT).show();
+                    Intent intent = new Intent(OperatorLoginActivity.this, OperatorDashboardActivity.class);
+                    intent.putExtra("operator_id", body.operatorId);
+                    intent.putExtra("name", body.name);
+                    startActivity(intent);
+                    finish();
+                } else {
+                    String message = response.body() != null ? response.body().message : "Invalid credentials";
+                    Toast.makeText(OperatorLoginActivity.this, message, Toast.LENGTH_SHORT).show();
+                }
             }
-        };
 
-        RequestQueue queue = Volley.newRequestQueue(this);
-        queue.add(request);
+            @Override
+            public void onFailure(Call<ApiModels.OperatorLoginResponse> call, Throwable t) {
+                Toast.makeText(OperatorLoginActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
     }
 }

@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Factory_Tracking</string>
+    <string name="accessibility_description">Used for background Bluetooth scanner monitoring.</string>
 </resources>

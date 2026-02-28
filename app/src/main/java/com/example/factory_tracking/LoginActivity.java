@@ -8,138 +8,112 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
+import com.example.factory_tracking.api.ApiModels;
+import com.example.factory_tracking.api.RetrofitClient;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.util.HashMap;
-import java.util.Map;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class LoginActivity extends AppCompatActivity {
 
-    EditText etUserId, etPassword;
-    Button btnLogin;
-
-    // Backend login URL
-    String LOGIN_URL = "http://192.168.1.4:3000/login";
+    private EditText etUserId, etPassword;
+    private SessionManager session;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        session = new SessionManager(this);
+        session.applyTheme(); 
+        
         super.onCreate(savedInstanceState);
+        RetrofitClient.init(this);
+
+        if (session.isLoggedIn()) {
+            goToNextActivity();
+            return;
+        }
+
         setContentView(R.layout.activity_login);
 
         etUserId = findViewById(R.id.etUserId);
         etPassword = findViewById(R.id.etPassword);
-        btnLogin = findViewById(R.id.btnLogin);
 
-        btnLogin.setOnClickListener(v -> loginUser());
+        findViewById(R.id.btnLogin).setOnClickListener(v -> supervisorLogin());
+        findViewById(R.id.btnAdminLogin).setOnClickListener(v -> adminLogin());
+        findViewById(R.id.btnOperatorLogin).setOnClickListener(v -> {
+            startActivity(new Intent(this, OperatorLoginActivity.class));
+        });
     }
 
-    private void loginUser() {
+    private void goToNextActivity() {
+        if (session.isSupervisor()) {
+            if (session.getSessionId() > 0) {
+                startActivity(new Intent(this, DashboardActivity.class));
+            } else {
+                startActivity(new Intent(this, StartShiftActivity.class));
+            }
+        } else if (session.isAdmin()) {
+            startActivity(new Intent(this, AdminDashboardActivity.class));
+        }
+        finish();
+    }
 
+    private void supervisorLogin() {
         String userId = etUserId.getText().toString().trim();
         String password = etPassword.getText().toString().trim();
-
-        if(userId.isEmpty() || password.isEmpty()){
-            Toast.makeText(LoginActivity.this,
-                    "Enter UserID and Password",
-                    Toast.LENGTH_SHORT).show();
+        if (userId.isEmpty() || password.isEmpty()) {
+            Toast.makeText(this, "Enter User ID and Password", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        StringRequest stringRequest =
-                new StringRequest(Request.Method.POST, LOGIN_URL,
+        ApiModels.LoginRequest req = new ApiModels.LoginRequest(userId, password);
+        RetrofitClient.getApi().login(req).enqueue(new Callback<ApiModels.LoginResponse>() {
+            @Override
+            public void onResponse(Call<ApiModels.LoginResponse> call, Response<ApiModels.LoginResponse> response) {
+                if (response.isSuccessful() && response.body() != null && "success".equals(response.body().status)) {
+                    ApiModels.LoginResponse body = response.body();
+                    session.saveSupervisorSession(body.supervisorId, body.name, body.line);
+                    Toast.makeText(LoginActivity.this, "Login successful", Toast.LENGTH_SHORT).show();
+                    goToNextActivity();
+                } else {
+                    Toast.makeText(LoginActivity.this, "Invalid credentials", Toast.LENGTH_SHORT).show();
+                }
+            }
 
-                        response -> {
+            @Override
+            public void onFailure(Call<ApiModels.LoginResponse> call, Throwable t) {
+                Toast.makeText(LoginActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
 
-                            try {
+    private void adminLogin() {
+        String userId = etUserId.getText().toString().trim();
+        String password = etPassword.getText().toString().trim();
+        if (userId.isEmpty() || password.isEmpty()) {
+            Toast.makeText(this, "Enter Admin ID and Password", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
-                                JSONObject jsonObject = new JSONObject(response);
+        ApiModels.AdminLoginRequest req = new ApiModels.AdminLoginRequest();
+        req.userId = userId;
+        req.password = password;
+        RetrofitClient.getApi().adminLogin(req).enqueue(new Callback<ApiModels.AdminLoginResponse>() {
+            @Override
+            public void onResponse(Call<ApiModels.AdminLoginResponse> call, Response<ApiModels.AdminLoginResponse> response) {
+                if (response.isSuccessful() && response.body() != null && "success".equals(response.body().status)) {
+                    session.saveAdminSession(response.body().adminId);
+                    Toast.makeText(LoginActivity.this, "Admin login successful", Toast.LENGTH_SHORT).show();
+                    goToNextActivity();
+                } else {
+                    Toast.makeText(LoginActivity.this, "Invalid admin credentials", Toast.LENGTH_SHORT).show();
+                }
+            }
 
-                                String status = jsonObject.getString("status");
-
-                                if(status.equals("success")) {
-
-                                    // Extract supervisor details
-                                    String supervisorId =
-                                            jsonObject.getString("supervisor_id");
-
-                                    String name =
-                                            jsonObject.getString("name");
-
-                                    String line =
-                                            jsonObject.getString("line");
-
-                                    Toast.makeText(LoginActivity.this,
-                                            "Login Successful",
-                                            Toast.LENGTH_SHORT).show();
-
-                                    // Send data to DashboardActivity
-                                    Intent intent =
-                                            new Intent(LoginActivity.this,
-                                                    DashboardActivity.class);
-
-                                    intent.putExtra("supervisor_id",
-                                            supervisorId);
-
-                                    intent.putExtra("name",
-                                            name);
-
-                                    intent.putExtra("line",
-                                            line);
-
-                                    startActivity(intent);
-
-                                    finish();
-
-                                }
-                                else {
-
-                                    Toast.makeText(LoginActivity.this,
-                                            "Invalid Credentials",
-                                            Toast.LENGTH_SHORT).show();
-
-                                }
-
-                            }
-                            catch (JSONException e) {
-
-                                Toast.makeText(LoginActivity.this,
-                                        "JSON Error: " + e.getMessage(),
-                                        Toast.LENGTH_LONG).show();
-
-                            }
-
-                        },
-
-                        error -> Toast.makeText(LoginActivity.this,
-                                "Server Error: " + error.toString(),
-                                Toast.LENGTH_LONG).show()
-
-                ){
-
-                    @Override
-                    protected Map<String, String> getParams(){
-
-                        Map<String,String> params =
-                                new HashMap<>();
-
-                        params.put("userId", userId);
-                        params.put("password", password);
-
-                        return params;
-                    }
-
-                };
-
-        RequestQueue queue =
-                Volley.newRequestQueue(LoginActivity.this);
-
-        queue.add(stringRequest);
-
+            @Override
+            public void onFailure(Call<ApiModels.AdminLoginResponse> call, Throwable t) {
+                Toast.makeText(LoginActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
     }
 }
