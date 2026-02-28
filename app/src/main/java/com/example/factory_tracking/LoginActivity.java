@@ -72,7 +72,23 @@ public class LoginActivity extends AppCompatActivity {
             public void onResponse(Call<ApiModels.LoginResponse> call, Response<ApiModels.LoginResponse> response) {
                 if (response.isSuccessful() && response.body() != null && "success".equals(response.body().status)) {
                     ApiModels.LoginResponse body = response.body();
+                    
+                    // Save the basic supervisor session
                     session.saveSupervisorSession(body.supervisorId, body.name, body.line);
+                    
+                    // NEW: If server says this supervisor already has an active shift, save those details too
+                    if (body.activeSession != null) {
+                        session.saveShiftSession(
+                            body.activeSession.sessionId,
+                            body.activeSession.shift,
+                            body.activeSession.endTime,
+                            body.activeSession.lineId
+                        );
+                    } else {
+                        // Crucial: Clear any old shift data from other supervisors on this device
+                        session.clearShiftSession();
+                    }
+
                     Toast.makeText(LoginActivity.this, "Login successful", Toast.LENGTH_SHORT).show();
                     goToNextActivity();
                 } else {

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS stations (
     station_id VARCHAR(20) PRIMARY KEY,
     line VARCHAR(50),
     operator_id VARCHAR(20) DEFAULT NULL,
+    operator_name VARCHAR(100) DEFAULT NULL,
     status VARCHAR(20) DEFAULT 'red'
 );
 

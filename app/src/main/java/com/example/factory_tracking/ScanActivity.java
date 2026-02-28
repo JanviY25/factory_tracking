@@ -22,6 +22,7 @@ public class ScanActivity extends AppCompatActivity {
     private TextView tvScanStatus;
     private EditText etScanInput;
     private String pendingStationId;
+    private String pendingOperatorName;
     private SessionManager session;
 
     @Override
@@ -41,7 +42,8 @@ public class ScanActivity extends AppCompatActivity {
 
         etScanInput.requestFocus();
         etScanInput.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_DONE || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN)) {
+            if (actionId == EditorInfo.IME_ACTION_DONE || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                    && event.getAction() == KeyEvent.ACTION_DOWN)) {
                 onScanReceived(etScanInput.getText().toString());
                 etScanInput.setText("");
                 return true;
@@ -66,10 +68,12 @@ public class ScanActivity extends AppCompatActivity {
     }
 
     private void onScanReceived(String raw) {
-        if (raw == null || raw.trim().isEmpty()) return;
+        if (raw == null || raw.trim().isEmpty())
+            return;
 
         String stationId = ScanHelper.extractStationId(raw);
         String operatorId = ScanHelper.extractOperatorId(raw);
+        String operatorName = ScanHelper.extractOperatorName(raw);
 
         if (stationId != null) {
             pendingStationId = stationId;
@@ -79,8 +83,9 @@ public class ScanActivity extends AppCompatActivity {
         }
 
         if (operatorId != null && pendingStationId != null) {
-            assignOperator(pendingStationId, operatorId);
+            assignOperator(pendingStationId, operatorId, operatorName);
             pendingStationId = null;
+            pendingOperatorName = null;
             tvScanStatus.setText("Scan station first...");
             etScanInput.setText("");
             return;
@@ -94,8 +99,9 @@ public class ScanActivity extends AppCompatActivity {
             return;
         }
         if (pendingStationId != null && raw.matches("^[A-Za-z0-9\\-]+$")) {
-            assignOperator(pendingStationId, raw.trim());
+            assignOperator(pendingStationId, raw.trim(), null);
             pendingStationId = null;
+            pendingOperatorName = null;
             tvScanStatus.setText("Scan station first...");
             etScanInput.setText("");
             return;
@@ -105,10 +111,11 @@ public class ScanActivity extends AppCompatActivity {
         etScanInput.setText("");
     }
 
-    private void assignOperator(String stationId, String operatorId) {
+    private void assignOperator(String stationId, String operatorId, String operatorName) {
         ApiModels.AssignRequest req = new ApiModels.AssignRequest();
         req.stationId = stationId;
         req.operatorId = operatorId;
+        req.operatorName = operatorName;
         req.supervisorId = session.getSupervisorId();
         req.shift = session.getShift();
         req.sessionId = session.getSessionId() > 0 ? session.getSessionId() : null;
@@ -117,7 +124,8 @@ public class ScanActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<ApiModels.AssignResponse> call, Response<ApiModels.AssignResponse> response) {
                 if (response.isSuccessful() && response.body() != null && "success".equals(response.body().status)) {
-                    Toast.makeText(ScanActivity.this, "Assigned " + operatorId + " to " + stationId, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(ScanActivity.this, "Assigned " + operatorId + " to " + stationId, Toast.LENGTH_SHORT)
+                            .show();
                     tvScanStatus.setText("Assigned. Scan next station then operator.");
                 } else {
                     Toast.makeText(ScanActivity.this, "Assign failed", Toast.LENGTH_SHORT).show();

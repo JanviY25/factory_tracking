@@ -27,6 +27,9 @@ public interface ApiService {
     @POST("api/startShift")
     Call<ApiModels.StartShiftResponse> startShift(@Body ApiModels.StartShiftRequest body);
 
+    @POST("api/updateShiftTime")
+    Call<ApiModels.SimpleResponse> updateShiftTime(@Body Map<String, Object> body);
+
     @POST("api/getStations")
     Call<ApiModels.GetStationsResponse> getStations(@Body ApiModels.GetStationsRequest body);
 

@@ -35,7 +35,17 @@ public class StationAdapter extends RecyclerView.Adapter<StationAdapter.ViewHold
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         ApiModels.StationItem item = list.get(position);
         holder.tvStationId.setText(item.stationId);
-        holder.tvOperatorId.setText("Operator: " + (item.operatorId != null && !item.operatorId.isEmpty() ? item.operatorId : "—"));
+        
+        // Show Operator Name if available, otherwise show ID or "Vacant"
+        String opDisplayName = "Vacant";
+        if (item.operatorName != null && !item.operatorName.isEmpty()) {
+            opDisplayName = item.operatorName;
+        } else if (item.operatorId != null && !item.operatorId.isEmpty()) {
+            opDisplayName = item.operatorId;
+        }
+        
+        holder.tvOperatorId.setText("Operator: " + opDisplayName);
+        
         String status = item.status != null ? item.status : "none";
         if ("green".equalsIgnoreCase(status)) {
             holder.itemView.setBackgroundColor(Color.parseColor("#A5D6A7"));
@@ -43,8 +53,10 @@ public class StationAdapter extends RecyclerView.Adapter<StationAdapter.ViewHold
             holder.itemView.setBackgroundColor(Color.parseColor("#FFF59D"));
         } else if ("red".equalsIgnoreCase(status)) {
             holder.itemView.setBackgroundColor(Color.parseColor("#EF9A9A"));
-        } else {
+        } else if ("maintenance".equalsIgnoreCase(status)) {
             holder.itemView.setBackgroundColor(Color.LTGRAY);
+        } else {
+            holder.itemView.setBackgroundColor(Color.WHITE);
         }
     }
 

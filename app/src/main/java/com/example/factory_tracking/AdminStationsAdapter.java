@@ -13,7 +13,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.factory_tracking.api.ApiModels;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class AdminStationsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
@@ -25,6 +27,7 @@ public class AdminStationsAdapter extends RecyclerView.Adapter<RecyclerView.View
     private static final int TYPE_STATION = 1;
 
     private final List<Object> items = new ArrayList<>();
+    private final Map<String, String> lineSupervisorMap = new HashMap<>();
     private final OnRemoveLineListener onRemoveLine;
 
     public AdminStationsAdapter(OnRemoveLineListener onRemoveLine) {
@@ -33,15 +36,25 @@ public class AdminStationsAdapter extends RecyclerView.Adapter<RecyclerView.View
 
     public void setStations(List<ApiModels.StationItem> stations) {
         items.clear();
+        lineSupervisorMap.clear();
         if (stations == null || stations.isEmpty()) {
             notifyDataSetChanged();
             return;
         }
+
+        // Extract supervisor info from the station items (passed from backend)
+        for (ApiModels.StationItem s : stations) {
+            if (s.line != null && s.inCharge != null) {
+                lineSupervisorMap.put(s.line, s.inCharge);
+            }
+        }
+
         stations.sort((a, b) -> {
             int c = (a.line == null ? "" : a.line).compareTo(b.line == null ? "" : b.line);
             if (c != 0) return c;
             return (a.stationId == null ? "" : a.stationId).compareTo(b.stationId == null ? "" : b.stationId);
         });
+
         String lastLine = null;
         for (ApiModels.StationItem s : stations) {
             String line = s.line != null ? s.line : "";
@@ -76,14 +89,23 @@ public class AdminStationsAdapter extends RecyclerView.Adapter<RecyclerView.View
         Object o = items.get(position);
         if (holder instanceof HeaderHolder) {
             String lineName = (String) o;
+            String supervisor = lineSupervisorMap.getOrDefault(lineName, "N/A");
             HeaderHolder hh = (HeaderHolder) holder;
-            hh.tvLineHeader.setText(lineName);
+            hh.tvLineHeader.setText(lineName + " | In-Charge: " + supervisor);
             hh.btnRemoveLine.setOnClickListener(v -> onRemoveLine.onRemove(lineName));
         } else {
             ApiModels.StationItem s = (ApiModels.StationItem) o;
             StationHolder sh = (StationHolder) holder;
             sh.tvStationId.setText(s.stationId);
-            sh.tvOperatorId.setText("Operator: " + (s.operatorId != null && !s.operatorId.isEmpty() ? s.operatorId : "—"));
+            
+            String opDisplayName = "Vacant";
+            if (s.operatorName != null && !s.operatorName.isEmpty()) {
+                opDisplayName = s.operatorName;
+            } else if (s.operatorId != null && !s.operatorId.isEmpty()) {
+                opDisplayName = s.operatorId;
+            }
+            sh.tvOperatorId.setText("Operator: " + opDisplayName);
+
             String status = s.status != null ? s.status : "none";
             if ("green".equalsIgnoreCase(status)) {
                 sh.itemView.setBackgroundColor(Color.parseColor("#A5D6A7"));

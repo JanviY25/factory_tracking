@@ -65,9 +65,14 @@ public class OperatorDashboardActivity extends AppCompatActivity {
                     java.util.List<ApiModels.OperatorHistoryRecord> history = response.body().history;
                     if (history == null || history.isEmpty()) {
                         TextView empty = new TextView(OperatorDashboardActivity.this);
-                        empty.setText("No work history found.");
+                        // Use server message if available
+                        String msg = response.body().message;
+                        empty.setText(
+                                msg != null && !msg.isEmpty() ? msg : "Sorry, no work is assigned to you until now.");
                         empty.setTextSize(18);
-                        empty.setPadding(30, 30, 30, 30);
+                        empty.setPadding(30, 60, 30, 60);
+                        empty.setGravity(android.view.Gravity.CENTER);
+                        empty.setTextColor(android.graphics.Color.parseColor("#666666"));
                         historyContainer.addView(empty);
                     } else {
                         currentStationId = history.get(0).stationId;

@@ -21,6 +21,18 @@ public class ApiModels {
         public String supervisorId;
         public String name;
         public String line;
+        @SerializedName("active_session")
+        public ActiveSession activeSession;
+    }
+
+    public static class ActiveSession {
+        @SerializedName("session_id")
+        public int sessionId;
+        @SerializedName("line_id")
+        public String lineId;
+        public String shift;
+        @SerializedName("end_time")
+        public String endTime;
     }
 
     public static class AdminLoginRequest {
@@ -46,6 +58,7 @@ public class ApiModels {
 
     public static class StartShiftResponse {
         public String status;
+        public String message;
         @SerializedName("session_id")
         public int sessionId;
     }
@@ -64,7 +77,11 @@ public class ApiModels {
         public String line;
         @SerializedName("operator_id")
         public String operatorId;
+        @SerializedName("operator_name")
+        public String operatorName;
         public String status;
+        @SerializedName("in_charge")
+        public String inCharge;
     }
 
     public static class GetStationsResponse {
@@ -77,6 +94,8 @@ public class ApiModels {
         public String stationId;
         @SerializedName("operator_id")
         public String operatorId;
+        @SerializedName("operator_name")
+        public String operatorName;
         @SerializedName("supervisor_id")
         public String supervisorId;
         public String shift;
@@ -143,7 +162,6 @@ public class ApiModels {
         public List<TransactionItem> data;
     }
 
-    // Operator login & history
     public static class OperatorLoginRequest {
         public String name;
         public String password;
@@ -151,20 +169,17 @@ public class ApiModels {
 
     public static class OperatorLoginResponse {
         public String status;
-        @SerializedName("operator_id")
-        public String operatorId;
+        @SerializedName("operator_id") public String operatorId;
         public String name;
         public String message;
     }
 
     public static class OperatorHistoryRequest {
-        @SerializedName("operator_id")
-        public String operatorId;
+        @SerializedName("operator_id") public String operatorId;
     }
 
     public static class OperatorHistoryRecord {
-        @SerializedName("station_id")
-        public String stationId;
+        @SerializedName("station_id") public String stationId;
         public String date;
         public String shift;
         public String status;
@@ -172,6 +187,7 @@ public class ApiModels {
 
     public static class OperatorHistoryResponse {
         public String status;
+        public String message;
         public List<OperatorHistoryRecord> history;
     }
 
@@ -181,12 +197,9 @@ public class ApiModels {
     }
 
     public static class ProcessCompletionRequest {
-        @SerializedName("operator_id")
-        public String operatorId;
-        @SerializedName("station_id")
-        public String stationId;
-        @SerializedName("step_name")
-        public String stepName;
+        @SerializedName("operator_id") public String operatorId;
+        @SerializedName("station_id") public String stationId;
+        @SerializedName("step_name") public String stepName;
     }
 
     public static class SimpleResponse {
@@ -195,30 +208,20 @@ public class ApiModels {
     }
 
     public static class ValidationFailureRequest {
-        @SerializedName("supervisor_id")
-        public String supervisorId;
-        @SerializedName("station_id")
-        public String stationId;
-        @SerializedName("operator_id")
-        public String operatorId;
+        @SerializedName("supervisor_id") public String supervisorId;
+        @SerializedName("station_id") public String stationId;
+        @SerializedName("operator_id") public String operatorId;
         public String reason;
     }
 
     public static class IdleTimeItem {
-        @SerializedName("session_id")
-        public int sessionId;
-        @SerializedName("line_id")
-        public String lineId;
-        @SerializedName("supervisor_id")
-        public String supervisorId;
-        @SerializedName("session_start")
-        public String sessionStart;
-        @SerializedName("session_end")
-        public String sessionEnd;
-        @SerializedName("total_shift_minutes")
-        public int totalShiftMinutes;
-        @SerializedName("total_working_minutes")
-        public int totalWorkingMinutes;
+        @SerializedName("session_id") public int sessionId;
+        @SerializedName("line_id") public String lineId;
+        @SerializedName("supervisor_id") public String supervisorId;
+        @SerializedName("session_start") public String sessionStart;
+        @SerializedName("session_end") public String sessionEnd;
+        @SerializedName("total_shift_minutes") public int totalShiftMinutes;
+        @SerializedName("total_working_minutes") public int totalWorkingMinutes;
     }
 
     public static class IdleTimeResponse {
