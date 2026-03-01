@@ -221,18 +221,38 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void saveAndOpenCsv(ResponseBody body, String filename) {
         try {
-            File dir = getExternalFilesDir(null);
+
+            // Save to Downloads folder
+            File dir = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS);
+
             File file = new File(dir, filename);
+
             try (FileOutputStream fos = new FileOutputStream(file)) {
                 fos.write(body.bytes());
             }
-            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
+
+            // Open file automatically
+            Uri uri = FileProvider.getUriForFile(
+                    this,
+                    getPackageName() + ".fileprovider",
+                    file
+            );
+
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(uri, "text/csv");
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
             startActivity(Intent.createChooser(intent, "Open Report"));
+
+            // Success message
+            Toast.makeText(this,
+                    "Report exported successfully",
+                    Toast.LENGTH_SHORT).show();
+
         } catch (IOException e) {
             e.printStackTrace();
+            Toast.makeText(this, "Error saving file", Toast.LENGTH_SHORT).show();
         }
     }
 

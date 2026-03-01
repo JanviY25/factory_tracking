@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <external-files-path name="exports" path="."/>
-    <files-path name="files" path="."/>
+
+    <!-- for Downloads / external storage -->
+    <external-path
+        name="external_files"
+        path="." />
+
+    <!-- existing paths (keep them) -->
+    <external-files-path
+        name="exports"
+        path="." />
+
+    <files-path
+        name="files"
+        path="." />
+
 </paths>
